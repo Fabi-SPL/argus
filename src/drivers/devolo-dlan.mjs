@@ -8,11 +8,28 @@
 // against `radios.read`, not to be trusted on its own.
 
 import { z } from 'zod'
-import { defineDriver, defineCapability } from '../core/driver.mjs'
+import { defineDriver, defineCapability, requireConfig } from '../core/driver.mjs'
+import { fingerprint } from '../core/redact.mjs'
 
 const NULL_SID = '00000000000000000000000000000000'
 const SETTLE_MS = 15_000        // how long the radios take to come back after a wireless commit
 const GUEST = /gastzugang|guest/i
+const NULL_BSSID = /^0{2}(:0{2}){5}$/i
+
+/**
+ * A radio that is still coming up answers `iwinfo` with an all-zero BSSID and reports `open`, which
+ * is a lie that lasts a few seconds and would otherwise be returned as a security finding. Wait
+ * until every named interface has a real BSSID before believing anything it says about encryption.
+ */
+async function settleRadios(u, tries = 5, waitMs = 5_000) {
+  let radios = await liveRadios(u)
+  for (let i = 0; i < tries; i++) {
+    if (!radios.some((r) => r.ssid && NULL_BSSID.test(r.bssid ?? ''))) return radios
+    await sleep(waitMs)
+    radios = await liveRadios(u)
+  }
+  return radios
+}
 
 class Ubus {
   constructor({ host, password, username = 'root', timeout = 12_000 }) {
@@ -227,12 +244,65 @@ export default defineDriver({
             const c = await u.uciCommit('wireless')
             if (!c.ok) throw new Error(`commit failed (${c.code})`)
 
-            await sleep(SETTLE_MS)
-            const after = await liveRadios(u)
+            const after = await settleRadios(u)
             const up = after.filter((r) => r.ssid === ssid).length
             return {
               mode: 'applied', before, after, broadcasting: up,
               ...(up ? {} : { warning: 'nothing is broadcasting — bring the radios back with radios.enable' }),
+            }
+          },
+        }),
+
+        // The new passphrase is deliberately NOT an argument. It is read from `wifi_key` in the
+        // device config, which resolves from .env — so the value never appears in a tool call, an
+        // MCP transcript, a hub request body or a shell history. The caller chooses *whether* to
+        // rotate; the operator chooses *to what*, out of band. Every other design here leaks.
+        defineCapability({
+          name: 'key.set',
+          title: 'Rotate the passphrase on every non-guest network',
+          kind: 'write',
+          input: z.object({
+            dryRun: z.boolean().default(true).describe('Report the plan without writing. Default true.'),
+          }),
+          async run({ dryRun }) {
+            requireConfig(device, ['wifi_key'])
+            const key = device.wifi_key
+            if (key.length < 8 || key.length > 63) {
+              throw new Error(`wifi_key is ${key.length} characters — WPA2 accepts 8 to 63`)
+            }
+            const { fp } = fingerprint(key)
+
+            const plan = []
+            const notes = []
+            for (const [name, sec] of await wirelessSections(u)) {
+              if (sec['.type'] !== 'wifi-iface' || isGuest(sec)) continue
+              if (!/^psk/.test(sec.encryption ?? '')) {
+                notes.push(`${name} is "${sec.encryption ?? 'unset'}", not WPA-PSK — a key there changes nothing`)
+                continue
+              }
+              if (sec.key === key) { notes.push(`${name} already carries this passphrase`); continue }
+              plan.push([name, { key }, `"${sec.ssid}" → new passphrase (${key.length} chars, ${fp})`])
+            }
+
+            if (dryRun) {
+              return { mode: 'dry run', newKey: { length: key.length, fingerprint: fp }, notes,
+                plan: plan.map(([n, , label]) => `${n}  ${label}`) }
+            }
+
+            for (const [name, values] of plan) {
+              const r = await u.uciSet('wireless', name, values)
+              if (!r.ok) throw new Error(`uci set ${name} failed (${r.code}) — nothing committed`)
+            }
+            const c = await u.uciCommit('wireless')
+            if (!c.ok) throw new Error(`commit failed (${c.code})`)
+
+            const after = await settleRadios(u)
+            return {
+              mode: 'applied', changed: plan.length, notes,
+              newKey: { length: key.length, fingerprint: fp },
+              broadcasting: after.filter((r) => r.ssid).length,
+              radios: after,
+              reminder: 'every device on these networks must rejoin with the new passphrase',
             }
           },
         }),
