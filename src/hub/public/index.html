@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Argus</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --surface: #ffffff;
+    --line: #e6e5e2;
+    --ink: #1a1a19;
+    --ink-soft: #605e5a;
+    --ink-faint: #8a8781;
+    --accent: #7f77dd;
+    --ok: #3f8f5f;
+    --warn: #a8761f;
+    --risk: #b4463c;
+    --unknown: #8a8781;
+    /* neutral shadow, no brand hue — a coloured shadow reads as ambient light and is never right */
+    --shadow: 0 1px 2px rgba(20, 20, 19, 0.05), 0 1px 8px rgba(20, 20, 19, 0.04);
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414;
+      --surface: #1c1c1c;
+      --line: #2e2e2e;
+      --ink: #eceae6;
+      --ink-soft: #a5a29c;
+      --ink-faint: #77746e;
+      --accent: #9a93e8;
+      --ok: #6bb98a;
+      --warn: #d1a04a;
+      --risk: #e07a6e;
+      --unknown: #77746e;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 8px rgba(0, 0, 0, 0.3);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.6 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+    letter-spacing: 0.01em;
+    text-align: left;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 24px 80px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); margin: 36px 0 12px; font-weight: 600; }
+  p { margin: 0 0 10px; max-width: 68ch; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace; font-size: 13px; }
+
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .eye { color: var(--accent); }
+  .site { color: var(--ink-faint); font-size: 13px; }
+  .spacer { flex: 1; }
+  button {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; cursor: pointer;
+  }
+  button:hover { border-color: var(--ink-faint); }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  .verdict { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); margin-top: 24px; }
+  .verdict-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); }
+  .dot.risk { background: var(--risk); } .dot.unknown { background: var(--unknown); }
+  .verdict h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .counts { color: var(--ink-faint); font-size: 13px; }
+
+  ul.checks { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--line); }
+  ul.checks li { display: flex; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+  ul.checks li:last-child { border-bottom: 0; }
+  .check-body strong { font-weight: 600; display: block; }
+  .check-body span { color: var(--ink-soft); font-size: 13.5px; }
+  .check-dot { margin-top: 8px; }
+
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .card { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 15px 17px; box-shadow: var(--shadow); }
+  .card h3 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+  .card .meta { color: var(--ink-faint); font-size: 12.5px; margin-bottom: 10px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .caps { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .caps button { font-size: 11.5px; padding: 3px 8px; font-family: ui-monospace, monospace; }
+  .caps button.write { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+
+  .runner { margin-top: 12px; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
+  .runner-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .runner-head code { font-size: 13.5px; font-weight: 600; }
+  .kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 20px; border: 1px solid var(--line); color: var(--ink-faint); }
+  textarea {
+    width: 100%; min-height: 78px; font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.5;
+    color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; resize: vertical;
+  }
+  label.confirm { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); }
+  pre.out {
+    margin: 12px 0 0; padding: 12px 14px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 7px; overflow-x: auto; max-height: 460px; white-space: pre; color: var(--ink-soft);
+  }
+  .empty { color: var(--ink-faint); font-size: 13.5px; }
+  .err { color: var(--risk); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Argus<span class="eye">.</span></h1>
+    <span class="site" id="site">loading…</span>
+    <span class="spacer"></span>
+    <button id="refresh">Refresh</button>
+  </header>
+
+  <section class="verdict" id="verdict">
+    <div class="verdict-head"><span class="dot unknown"></span><h3>Reading the network…</h3></div>
+    <p class="counts">Asking every device at once.</p>
+  </section>
+
+  <h2>Devices</h2>
+  <div class="grid" id="devices"><p class="empty">Probing…</p></div>
+
+  <h2>Run a capability</h2>
+  <div class="runner" id="runner">
+    <p class="empty">Pick a capability from a device above.</p>
+  </div>
+</main>
+
+<script type="module">
+const $ = (s) => document.querySelector(s)
+const el = (tag, props = {}, kids = []) => {
+  const n = Object.assign(document.createElement(tag), props)
+  for (const k of [].concat(kids)) n.append(k)
+  return n
+}
+const api = async (path, opts) => {
+  const r = await fetch(path, opts)
+  const body = await r.json().catch(() => ({ error: 'BAD_RESPONSE', message: `${r.status}` }))
+  if (!r.ok) throw Object.assign(new Error(body.message ?? r.statusText), body)
+  return body
+}
+
+let CAPS = []
+
+async function loadSite() {
+  const { site } = await api('/api/site')
+  $('#site').textContent = site.name ?? ''
+}
+
+function renderPosture(p) {
+  const box = $('#verdict')
+  box.replaceChildren(
+    el('div', { className: 'verdict-head' }, [
+      el('span', { className: `dot ${p.verdict}` }),
+      el('h3', { textContent: p.headline }),
+    ]),
+    el('p', {
+      className: 'counts',
+      textContent: Object.entries(p.counts).map(([k, v]) => `${v} ${k}`).join(' · ')
+        + ` — checked ${new Date(p.checkedAt).toLocaleTimeString()}`,
+    }),
+    el('ul', { className: 'checks' }, p.checks.map((c) => el('li', {}, [
+      el('span', { className: `dot check-dot ${c.level}` }),
+      el('div', { className: 'check-body' }, [
+        el('strong', { textContent: c.title }),
+        el('span', { textContent: c.detail ?? '' }),
+      ]),
+    ]))),
+  )
+}
+
+function deviceCard(dev, probe) {
+  const facts = []
+  if (probe?.identity) for (const [k, v] of Object.entries(probe.identity)) if (v != null) facts.push([k, String(v)])
+  if (probe && probe.ok === false) facts.push(['error', probe.error ?? 'no answer'])
+
+  return el('div', { className: 'card' }, [
+    el('h3', { textContent: dev.title }),
+    el('div', { className: 'meta', textContent: `${dev.vendor ?? dev.driver} · ${dev.id}${probe?.ms != null ? ` · ${probe.ms} ms` : ''}` }),
+    el('dl', { className: 'kv' }, facts.flatMap(([k, v]) => [
+      el('dt', { textContent: k }),
+      el('dd', { textContent: v, className: k === 'error' ? 'err' : '' }),
+    ])),
+    el('div', { className: 'caps' }, CAPS.filter((c) => c.device === dev.id).map((c) =>
+      el('button', {
+        textContent: c.name,
+        title: `${c.title} — ${c.kind}`,
+        className: c.kind === 'write' || c.kind === 'restart' ? 'write' : '',
+        onclick: () => openRunner(c),
+      }))),
+  ])
+}
+
+function openRunner(cap) {
+  const mutating = cap.kind === 'write' || cap.kind === 'restart'
+  const args = el('textarea', { value: '{}', spellcheck: false })
+  const out = el('pre', { className: 'out', textContent: '' })
+  const confirm = el('input', { type: 'checkbox' })
+  const go = el('button', { textContent: 'Run' })
+
+  go.onclick = async () => {
+    let parsed
+    try { parsed = JSON.parse(args.value || '{}') }
+    catch (e) { out.textContent = `arguments are not valid JSON: ${e.message}`; out.classList.add('err'); return }
+    out.classList.remove('err')
+    out.textContent = 'running…'
+    go.disabled = true
+    try {
+      const r = await api('/api/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref: cap.ref, args: parsed, confirm: confirm.checked }),
+      })
+      out.textContent = JSON.stringify(r.result ?? r, null, 2)
+    } catch (e) {
+      out.classList.add('err')
+      out.textContent = `${e.error ?? 'FAILED'}: ${e.message}` + (e.issues ? `\n${e.issues.join('\n')}` : '')
+    } finally { go.disabled = false }
+  }
+
+  $('#runner').replaceChildren(
+    el('div', { className: 'runner-head' }, [
+      el('code', { textContent: cap.ref }),
+      el('span', { className: 'kind', textContent: cap.kind }),
+      el('span', { className: 'site', textContent: cap.title }),
+    ]),
+    args,
+    el('div', { className: 'runner-head', style: 'margin-top:10px' }, [
+      go,
+      ...(mutating ? [el('label', { className: 'confirm' }, [confirm, 'confirm — this changes device state'])] : []),
+    ]),
+    out,
+  )
+}
+
+async function refresh() {
+  $('#refresh').disabled = true
+  try {
+    const [devices, caps] = await Promise.all([api('/api/devices'), api('/api/capabilities')])
+    CAPS = caps
+    const probes = await api('/api/overview')
+    const byId = Object.fromEntries(probes.map((p) => [p.id, p]))
+    $('#devices').replaceChildren(...devices.map((d) => deviceCard(d, byId[d.id])))
+    renderPosture(await api('/api/posture'))
+  } catch (e) {
+    $('#devices').replaceChildren(el('p', { className: 'empty err', textContent: e.message }))
+  } finally { $('#refresh').disabled = false }
+}
+
+$('#refresh').onclick = refresh
+await loadSite()
+await refresh()
+</script>
+</body>
+</html>

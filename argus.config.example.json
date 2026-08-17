@@ -1,0 +1,62 @@
+{
+  "site": {
+    "name": "home"
+  },
+
+  "devices": [
+    {
+      "id": "gateway",
+      "title": "Gateway",
+      "role": "gateway",
+      "driver": "telekom-speedport",
+      "host": "${GATEWAY_HOST}",
+      "password": "${GATEWAY_PASSWORD}"
+    },
+
+    {
+      "id": "ap",
+      "title": "Access point",
+      "role": "ap",
+      "driver": "netgear-nighthawk",
+      "host": "${AP_HOST}",
+      "user": "${AP_USER}",
+      "password": "${AP_PASSWORD}",
+
+      "//guard": "Bands and SSIDs named here are refused by every write capability, before the driver is called. Use it for a band that is carrying something you must not interrupt.",
+      "guard": {
+        "bands": [],
+        "ssids": []
+      }
+    },
+
+    {
+      "id": "plug",
+      "title": "Powerline adapter",
+      "role": "ap",
+      "driver": "devolo-dlan",
+      "host": "${PLUG_HOST}",
+      "password": "${PLUG_PASSWORD}"
+    },
+
+    {
+      "id": "vpn",
+      "title": "Tailscale",
+      "role": "vpn",
+      "driver": "tailscale",
+      "tailnet": "${TAILSCALE_TAILNET}",
+      "apiKey": "${TAILSCALE_API_KEY}"
+    }
+  ],
+
+  "policy": {
+    "//confirmWrites": "Capabilities that change device state are refused unless the caller passes confirm: true. Turning this off is not recommended when an agent is holding the MCP tools.",
+    "confirmWrites": true,
+
+    "//allowRestart": "Reboot capabilities are not registered at all unless this is true.",
+    "allowRestart": false,
+
+    "//hubBind": "The hub holds admin credentials for every device listed above. Keep it on loopback unless you put an authenticating proxy in front.",
+    "hubBind": "127.0.0.1",
+    "hubPort": 4380
+  }
+}

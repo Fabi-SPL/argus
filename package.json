@@ -1,0 +1,30 @@
+{
+  "name": "argus-hub",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "One hub, one MCP server and one CLI over every router, access point and VPN in a home network — pluggable drivers, no vendor app required.",
+  "license": "MIT",
+  "keywords": ["mcp", "router", "home-network", "wifi", "openwrt", "netgear", "tailscale", "homelab"],
+  "bin": {
+    "argus": "bin/argus.mjs",
+    "argus-mcp": "bin/argus-mcp.mjs"
+  },
+  "exports": {
+    ".": "./src/core/registry.mjs",
+    "./driver": "./src/core/driver.mjs"
+  },
+  "files": ["bin", "src", "argus.config.example.json", ".env.example", "README.md", "LICENSE"],
+  "scripts": {
+    "hub": "node bin/argus.mjs hub",
+    "mcp": "node bin/argus-mcp.mjs",
+    "doctor": "node bin/argus.mjs doctor",
+    "posture": "node bin/argus.mjs posture"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,15 @@
+node_modules/
+
+# Every address, credential and network name lives here. Never committed.
+.env
+.env.*
+!.env.example
+
+# A filled-in config names your devices and their addresses.
+argus.config.json
+!argus.config.example.json
+
+*.log
+logs/
+backups/
+.DS_Store
