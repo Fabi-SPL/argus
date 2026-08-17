@@ -10,6 +10,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ArgusError, fail } from './errors.mjs'
 
 const ENV_REF = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/
@@ -53,10 +54,24 @@ const DEFAULT_POLICY = {
   hubPort: 4380,
 }
 
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+/**
+ * An MCP client launches the server with an arbitrary working directory, so cwd alone is not a
+ * reliable place to look. Prefer an explicit path, then cwd if it actually holds a config, then the
+ * package root — which is where a cloned checkout keeps its own.
+ */
+function locate(name, explicit, envVar) {
+  if (explicit) return explicit
+  if (process.env[envVar]) return process.env[envVar]
+  const inCwd = path.join(process.cwd(), name)
+  return fs.existsSync(inCwd) ? inCwd : path.join(PACKAGE_ROOT, name)
+}
+
 export function loadConfig({ root, configFile, envFile } = {}) {
-  const dir = root ?? process.cwd()
-  const cfgPath = configFile ?? process.env.ARGUS_CONFIG ?? path.join(dir, 'argus.config.json')
-  const envPath = envFile ?? process.env.ARGUS_ENV ?? path.join(dir, '.env')
+  const cfgPath = root ? path.join(root, 'argus.config.json') : locate('argus.config.json', configFile, 'ARGUS_CONFIG')
+  const envPath = root ? path.join(root, '.env') : locate('.env', envFile, 'ARGUS_ENV')
+  const dir = path.dirname(cfgPath)   // relative driver paths resolve against the config, not cwd
 
   if (!fs.existsSync(cfgPath)) {
     fail('CONFIG_INVALID', `no config at ${cfgPath} — copy argus.config.example.json and fill it in`, { path: cfgPath })
