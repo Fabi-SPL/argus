@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "One hub, one MCP server and one CLI over every router, access point and VPN in a home network — pluggable drivers, no vendor app required.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": ["mcp", "router", "home-network", "wifi", "openwrt", "netgear", "tailscale", "homelab"],
   "bin": {
     "argus": "bin/argus.mjs",
