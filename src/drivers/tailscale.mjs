@@ -44,6 +44,26 @@ async function api(token, path, { method = 'GET', body } = {}) {
 
 const advertisesExit = (routes) => EXIT_ROUTES.some((r) => (routes ?? []).includes(r))
 
+/**
+ * The tailnet /devices response has no `online` field — that is a LocalAPI concept, and reading it
+ * here silently marks every device offline. `connectedToControl` is the equivalent, and `lastSeen`
+ * is the fallback for older responses that carry neither.
+ */
+const isOnline = (d) => d.connectedToControl ?? d.online
+  ?? (d.lastSeen ? Date.now() - new Date(d.lastSeen).getTime() < 5 * 60_000 : null)
+
+/**
+ * Routes are NOT part of the device list — they only come from /device/{id}/routes, one call each.
+ * Filtering the list response on `advertisedRoutes` therefore matches nothing, ever, and an empty
+ * exit-node list reads as "you have none" rather than "this was never asked".
+ */
+async function routesOf(apiKey, devices) {
+  return Promise.all(devices.map(async (d) => ({
+    device: d,
+    routes: await api(apiKey, `/device/${d.id}/routes`).catch(() => null),
+  })))
+}
+
 /** Runs the local tailscale binary. Absent CLI is reported plainly, not thrown as a mystery. */
 async function cli(bin, args) {
   try {
@@ -71,7 +91,7 @@ export default defineDriver({
       async probe() {
         try {
           const { devices } = await api(apiKey, t('/devices'))
-          const online = devices.filter((d) => d.online).length
+          const online = devices.filter(isOnline).length
           return { ok: true, identity: { tailnet, devices: devices.length, online } }
         } catch (e) { return { ok: false, error: e.message } }
       },
@@ -81,21 +101,30 @@ export default defineDriver({
           name: 'devices.list',
           title: 'Every device in the tailnet',
           kind: 'read',
-          input: z.object({ onlineOnly: z.boolean().default(false) }),
-          async run({ onlineOnly }) {
-            const { devices } = await api(apiKey, t('/devices'))
+          input: z.object({
+            onlineOnly: z.boolean().default(false),
+            withRoutes: z.boolean().default(false)
+              .describe('Also resolve exit-node status. Costs one extra API call per device.'),
+          }),
+          async run({ onlineOnly, withRoutes }) {
+            const { devices: all } = await api(apiKey, t('/devices'))
+            const devices = all.filter((d) => !onlineOnly || isOnline(d))
+            // null, not false: without the per-device routes call this is genuinely unknown, and a
+            // confident `false` here is what made exitnodes.list look empty in the first place.
+            const routes = withRoutes
+              ? new Map((await routesOf(apiKey, devices)).map(({ device, routes: r }) => [device.id, r]))
+              : null
             return devices
-              .filter((d) => !onlineOnly || d.online)
               .map((d) => ({
                 id: d.id,
                 name: d.name,
                 hostname: d.hostname,
                 os: d.os,
                 addresses: d.addresses,
-                online: d.online,
+                online: isOnline(d),
                 lastSeen: d.lastSeen,
                 tags: d.tags ?? [],
-                advertisesExitNode: advertisesExit(d.advertisedRoutes ?? d.enabledRoutes),
+                advertisesExitNode: routes ? advertisesExit(routes.get(d.id)?.advertisedRoutes) : null,
                 updateAvailable: d.updateAvailable ?? null,
                 keyExpiryDisabled: d.keyExpiryDisabled ?? null,
                 expires: d.expires,
@@ -110,20 +139,16 @@ export default defineDriver({
           input: z.object({}),
           async run() {
             const { devices } = await api(apiKey, t('/devices'))
-            const candidates = devices.filter((d) => advertisesExit(d.advertisedRoutes) || advertisesExit(d.enabledRoutes))
-            const out = []
-            for (const d of candidates) {
-              const routes = await api(apiKey, `/device/${d.id}/routes`).catch(() => null)
-              out.push({
+            return (await routesOf(apiKey, devices))
+              .filter(({ routes }) => advertisesExit(routes?.advertisedRoutes) || advertisesExit(routes?.enabledRoutes))
+              .map(({ device: d, routes }) => ({
                 id: d.id,
                 name: d.name,
-                online: d.online,
+                online: isOnline(d),
                 advertised: advertisesExit(routes?.advertisedRoutes),
                 approved: advertisesExit(routes?.enabledRoutes),
-                usable: Boolean(d.online) && advertisesExit(routes?.enabledRoutes),
-              })
-            }
-            return out
+                usable: Boolean(isOnline(d)) && advertisesExit(routes?.enabledRoutes),
+              }))
           },
         }),
 
